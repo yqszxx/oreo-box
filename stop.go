@@ -1,14 +1,14 @@
 package main
 
 import (
-	log "github.com/Sirupsen/logrus"
-	"syscall"
-	"strconv"
-	"github.com/yqszxx/oreo-box/container"
-	"fmt"
-	"io/ioutil"
 	"encoding/json"
+	"fmt"
+	log "github.com/Sirupsen/logrus"
+	"github.com/yqszxx/oreo-box/container"
+	"io/ioutil"
 	"os"
+	"strconv"
+	"syscall"
 )
 
 func stopContainer(containerName string) {
