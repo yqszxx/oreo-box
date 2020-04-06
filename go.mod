@@ -1,4 +1,4 @@
-module github.com/xianlubird/mydocker
+module github.com/yqszxx/oreo-box
 
 go 1.14
 

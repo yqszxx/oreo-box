@@ -4,9 +4,9 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/urfave/cli"
-	"github.com/xianlubird/mydocker/cgroups/subsystems"
-	"github.com/xianlubird/mydocker/container"
-	"github.com/xianlubird/mydocker/network"
+	"github.com/yqszxx/oreo-box/cgroups/subsystems"
+	"github.com/yqszxx/oreo-box/container"
+	"github.com/yqszxx/oreo-box/network"
 	"os"
 )
 
