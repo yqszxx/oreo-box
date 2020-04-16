@@ -109,8 +109,6 @@ func DeleteWorkSpace(volume, containerName string) {
 func DeleteMountPoint(containerName string) error {
 	mntURL := fmt.Sprintf(MntUrl, containerName)
 	_, err := exec.Command("umount", mntURL).CombinedOutput()
-	// TODO: why not mount only once?
-	exec.Command("umount", mntURL).CombinedOutput()
 	if err != nil {
 		log.Errorf("Unmount %s error %v", mntURL, err)
 		return err
