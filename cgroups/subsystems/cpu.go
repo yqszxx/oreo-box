@@ -18,6 +18,13 @@ func (s *CpuSubSystem) Set(cgroupPath string, res *ResourceConfig) error {
 				return fmt.Errorf("set cgroup cpu share fail %v", err)
 			}
 		}
+
+		if res.CpuQuotaUs != "" {
+			if err := ioutil.WriteFile(path.Join(subsysCgroupPath, "cpu.cfs_quota_us"), []byte(res.CpuQuotaUs), 0644); err != nil {
+				return fmt.Errorf("set cgroup cpu.cfs_quota_us fail %v", err)
+			}
+		}
+
 		return nil
 	} else {
 		return err
@@ -44,5 +51,5 @@ func (s *CpuSubSystem) Apply(cgroupPath string, pid int) error {
 }
 
 func (s *CpuSubSystem) Name() string {
-	return "cpu"
+	return "cpu" //return subsystem name for getting the path
 }

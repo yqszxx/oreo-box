@@ -42,6 +42,7 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 	}
 
 	// use containerID as cgroup name
+	fmt.Println(containerID)
 	cgroupManager := cgroups.NewCgroupManager(containerID)
 	defer cgroupManager.Destroy()
 	cgroupManager.Set(res)
