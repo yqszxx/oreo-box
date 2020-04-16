@@ -35,6 +35,10 @@ var runCommand = cli.Command{
 			Usage: "cpuset limit",
 		},
 		cli.StringFlag{
+			Name:  "cpuquota",
+			Usage: "cpuquota limit",
+		},
+		cli.StringFlag{
 			Name:  "name",
 			Usage: "container name",
 		},
@@ -78,6 +82,7 @@ var runCommand = cli.Command{
 			MemoryLimit: context.String("m"),
 			CpuSet:      context.String("cpuset"),
 			CpuShare:    context.String("cpushare"),
+			CpuQuotaUs:  context.String("cpuquota"),
 		}
 		log.Infof("createTty %v", createTty)
 		containerName := context.String("name")
