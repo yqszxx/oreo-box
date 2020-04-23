@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 )
@@ -70,19 +71,33 @@ func pivotRoot(root string) error {
 	  为了使当前root的老 root 和新 root 不在同一个文件系统下，我们把root重新mount了一次
 	  bind mount是把相同的内容换了一个挂载点的挂载方法
 	*/
+	//creat direction rootfs/.pivotDir to store old root
+	pivotDir := filepath.Join(root, ".old_root")
+	if err := os.Mkdir(pivotDir, 0777); err != nil {
+		return fmt.Errorf("mkdir failed, because %v", err)
+	}
+
+	//mount root to make sure the new rootfs is not in the same location as the old rootfs
 	if err := syscall.Mount("/", "/", "private", syscall.MS_PRIVATE|syscall.MS_REC, ""); err != nil {
 		return fmt.Errorf("Mount rootfs to itself error: %v", err)
 	}
-	// TODO: check all error situations!!!
-	if err := syscall.PivotRoot(root, root); err != nil {
-		fmt.Println(666)
-		os.Exit(6)
+
+	// switch the filesystem to the new root
+	if err := syscall.PivotRoot(root, pivotDir); err != nil {
 		return fmt.Errorf("pivot_root %v", err)
 	}
-	// 修改当前的工作目录到根目录
+
+	// change the current working directory to the new root
 	if err := syscall.Chdir("/"); err != nil {
 		return fmt.Errorf("chdir / %v", err)
 	}
 
-	return nil
+	//the direction of old root in the new root is changed
+	pivotDir = filepath.Join("/", ".old_root")
+	//unmount old root from new root
+	if err := syscall.Unmount(pivotDir, syscall.MNT_DETACH); err != nil {
+		return fmt.Errorf("unmount old root failed, because %v", err)
+	}
+	//delete the temporary direction
+	return os.Remove(pivotDir)
 }
