@@ -160,7 +160,9 @@ var stopCommand = cli.Command{
 			return fmt.Errorf("Missing container name")
 		}
 		containerName := context.Args().Get(0)
-		stopContainer(containerName)
+		if err := stopContainer(containerName); err != nil {
+			return err
+		}
 		return nil
 	},
 }
@@ -173,7 +175,9 @@ var removeCommand = cli.Command{
 			return fmt.Errorf("Missing container name")
 		}
 		containerName := context.Args().Get(0)
-		removeContainer(containerName)
+		if err := removeContainer(containerName); err != nil {
+			return err
+		}
 		return nil
 	},
 }
