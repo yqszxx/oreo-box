@@ -31,7 +31,7 @@ func RunContainerInitProcess() error {
 	}
 	log.Printf("Find path %s", path)
 	if err := syscall.Exec(path, cmdArray[0:], os.Environ()); err != nil {
-		return fmt.Errorf(err.Error())
+		return err
 	}
 	return nil
 }
@@ -63,10 +63,10 @@ func setUpMount() error {
 	//mount proc and dev
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
 	if err := syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), ""); err != nil {
-		return fmt.Errorf(err.Error())
+		return err
 	}
 	if err := syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755"); err != nil {
-		return fmt.Errorf(err.Error())
+		return err
 	}
 	return nil
 }
