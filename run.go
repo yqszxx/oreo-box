@@ -12,11 +12,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
 func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerName, volume, imageName string,
 	envSlice []string, nw string, portmapping []string) error {
+	normalExit := false
+
 	containerID := randStringBytes(10)
 	if containerName == "" {
 		containerName = containerID
@@ -28,8 +31,17 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 	}
 
 	if err := parent.Start(); err != nil {
-		return err
+		return fmt.Errorf("cannot start init process: %v", err)
 	}
+	defer func() {
+		if normalExit {
+			return
+		}
+		log.Println("Killing init process...")
+		if err := syscall.Kill(parent.Process.Pid, syscall.SIGTERM); err != nil {
+			panic(err)
+		}
+	}()
 
 	//record container info
 	containerName, err = recordContainerInfo(parent.Process.Pid, comArray, containerName, containerID, volume)
@@ -85,6 +97,7 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 		log.Println("Interactive mode terminated successfully")
 	}
 
+	normalExit = true
 	return nil
 }
 
