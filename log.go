@@ -8,19 +8,26 @@ import (
 	"os"
 )
 
-func logContainer(containerName string) {
+func logContainer(containerName string) error {
 	dirURL := fmt.Sprintf(container.DefaultInfoLocation, containerName)
 	logFileLocation := dirURL + container.ContainerLogFile
 	file, err := os.Open(logFileLocation)
-	defer file.Close()
+	defer func() {
+		log.Println("closing LogFileLocation ...")
+		if err := file.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
 	if err != nil {
-		log.Errorf("Log container open file %s error %v", logFileLocation, err)
-		return
+		return fmt.Errorf("cannot open Log container file %s : %v", logFileLocation, err)
 	}
 	content, err := ioutil.ReadAll(file)
 	if err != nil {
-		log.Errorf("Log container read file %s error %v", logFileLocation, err)
-		return
+		return fmt.Errorf("cannot read Log container file %s : %v", logFileLocation, err)
 	}
-	fmt.Fprint(os.Stdout, string(content))
+	if _, err := fmt.Fprint(os.Stdout, string(content)); err != nil {
+		return err
+	}
+	return nil
 }

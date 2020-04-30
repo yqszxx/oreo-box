@@ -151,7 +151,6 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName,
 		return "", err
 	}
 	defer func() {
-		log.Println("closing ContainerInfo files...")
 		if err := file.Close(); err != nil {
 			panic(err)
 		}
