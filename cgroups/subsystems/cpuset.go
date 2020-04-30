@@ -13,11 +13,29 @@ type CpusetSubSystem struct {
 
 func (s *CpusetSubSystem) Set(cgroupPath string, res *ResourceConfig) error {
 	if subsysCgroupPath, err := GetCgroupPath(s.Name(), cgroupPath, true); err == nil {
-		if res.CpuSet != "" {
-			if err := ioutil.WriteFile(path.Join(subsysCgroupPath, "cpuset.cpus"), []byte(res.CpuSet), 0644); err != nil {
-				return fmt.Errorf("set cgroup cpuset fail %v", err)
+
+		if res.CpuSetCpus != "" {
+			if err := ioutil.WriteFile(path.Join(subsysCgroupPath, "cpuset.cpus"), []byte(res.CpuSetCpus), 0644); err != nil {
+				return fmt.Errorf("set cgroup cpuset.cpus fail %v", err)
+			}
+		} else {
+			ResetValue(&res.CpuSetCpus, "0")
+			if err := ioutil.WriteFile(path.Join(subsysCgroupPath, "cpuset.cpus"), []byte(res.CpuSetCpus), 0644); err != nil {
+				return fmt.Errorf("set cgroup cpuset.cpus fail %v", err)
 			}
 		}
+
+		if res.CpuSetMems != "" {
+			if err := ioutil.WriteFile(path.Join(subsysCgroupPath, "cpuset.mems"), []byte(res.CpuSetMems), 0644); err != nil {
+				return fmt.Errorf("set cgroup cpuset.mems fail %v", err)
+			}
+		} else {
+			ResetValue(&res.CpuSetMems, "0")
+			if err := ioutil.WriteFile(path.Join(subsysCgroupPath, "cpuset.mems"), []byte(res.CpuSetMems), 0644); err != nil {
+				return fmt.Errorf("set cgroup cpuset.mems fail %v", err)
+			}
+		}
+
 		return nil
 	} else {
 		return err
@@ -45,4 +63,12 @@ func (s *CpusetSubSystem) Apply(cgroupPath string, pid int) error {
 
 func (s *CpusetSubSystem) Name() string {
 	return "cpuset"
+}
+
+func ResetValue(s *string, newValue string) {
+	sByte := []byte(*s)
+	for i := 0; i < len(sByte); i++ {
+		sByte[i] = ' '
+	}
+	*s = newValue
 }
