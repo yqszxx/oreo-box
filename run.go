@@ -141,7 +141,11 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName,
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	if _, err := file.WriteString(jsonStr); err != nil {
 		return "", err
 	}

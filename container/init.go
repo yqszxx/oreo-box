@@ -36,7 +36,11 @@ func RunContainerInitProcess() error {
 
 func readUserCommand() ([]string, error) {
 	pipe := os.NewFile(uintptr(3), "pipe")
-	defer pipe.Close()
+	defer func() {
+		if err := pipe.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	msg, err := ioutil.ReadAll(pipe)
 	if err != nil {
 		return nil, fmt.Errorf("init read pipe error : %v", err)

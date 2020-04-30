@@ -116,7 +116,9 @@ var listCommand = cli.Command{
 	Name:  "ps",
 	Usage: "list all the containers",
 	Action: func(context *cli.Context) error {
-		ListContainers()
+		if err := ListContainers(); err != nil {
+			return fmt.Errorf("list failed because: %v", err)
+		}
 		return nil
 	},
 }
@@ -126,10 +128,12 @@ var logCommand = cli.Command{
 	Usage: "print logs of a container",
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
-			return fmt.Errorf("Please input your container name")
+			return fmt.Errorf("cannot find container name")
 		}
 		containerName := context.Args().Get(0)
-		logContainer(containerName)
+		if err := logContainer(containerName); err != nil {
+			return fmt.Errorf("log failed because: %v", err)
+		}
 		return nil
 	},
 }
@@ -145,7 +149,7 @@ var execCommand = cli.Command{
 		}
 
 		if len(context.Args()) < 2 {
-			return fmt.Errorf("Missing container name or command")
+			return fmt.Errorf("cannot find container name or command")
 		}
 		containerName := context.Args().Get(0)
 		var commandArray []string
@@ -164,7 +168,7 @@ var stopCommand = cli.Command{
 	Usage: "stop a container",
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
-			return fmt.Errorf("Missing container name")
+			return fmt.Errorf("cannot find container name")
 		}
 		containerName := context.Args().Get(0)
 		if err := stopContainer(containerName); err != nil {
@@ -179,7 +183,7 @@ var removeCommand = cli.Command{
 	Usage: "remove unused containers",
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
-			return fmt.Errorf("Missing container name")
+			return fmt.Errorf("cannot find container name")
 		}
 		containerName := context.Args().Get(0)
 		if err := removeContainer(containerName); err != nil {
@@ -194,11 +198,13 @@ var commitCommand = cli.Command{
 	Usage: "commit a container into image",
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 2 {
-			return fmt.Errorf("Missing container name and image name")
+			return fmt.Errorf("cannot find container name and image name")
 		}
 		containerName := context.Args().Get(0)
 		imageName := context.Args().Get(1)
-		commitContainer(containerName, imageName)
+		if err := commitContainer(containerName, imageName); err != nil {
+			return fmt.Errorf("exec commit failed becuase: %v", err)
+		}
 		return nil
 	},
 }
@@ -222,9 +228,12 @@ var networkCommand = cli.Command{
 			},
 			Action: func(context *cli.Context) error {
 				if len(context.Args()) < 1 {
-					return fmt.Errorf("Missing network name")
+					return fmt.Errorf("cannot find network name")
 				}
-				network.Init()
+				if err := network.Init(); err != nil {
+					return fmt.Errorf("init network failed becuase: %v", err)
+				}
+
 				err := network.CreateNetwork(context.String("driver"), context.String("subnet"), context.Args()[0])
 				if err != nil {
 					return fmt.Errorf("create network error: %+v", err)
@@ -236,7 +245,9 @@ var networkCommand = cli.Command{
 			Name:  "list",
 			Usage: "list container network",
 			Action: func(context *cli.Context) error {
-				network.Init()
+				if err := network.Init(); err != nil {
+					return fmt.Errorf("init network failed becuase: %v", err)
+				}
 				network.ListNetwork()
 				return nil
 			},
@@ -246,9 +257,11 @@ var networkCommand = cli.Command{
 			Usage: "remove container network",
 			Action: func(context *cli.Context) error {
 				if len(context.Args()) < 1 {
-					return fmt.Errorf("Missing network name")
+					return fmt.Errorf("cannot find network name")
 				}
-				network.Init()
+				if err := network.Init(); err != nil {
+					return fmt.Errorf("init network failed becuase: %v", err)
+				}
 				err := network.DeleteNetwork(context.Args()[0])
 				if err != nil {
 					return fmt.Errorf("remove network error: %+v", err)
