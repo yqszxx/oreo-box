@@ -33,15 +33,6 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 	if err := parent.Start(); err != nil {
 		return fmt.Errorf("cannot start init process: %v", err)
 	}
-	defer func() {
-		if normalExit {
-			return
-		}
-		log.Println("Killing init process...")
-		if err := syscall.Kill(parent.Process.Pid, syscall.SIGTERM); err != nil {
-			panic(err)
-		}
-	}()
 
 	//record container info
 	containerName, err = recordContainerInfo(parent.Process.Pid, comArray, containerName, containerID, volume)
@@ -52,15 +43,33 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 	// use containerID as cgroup name
 	log.Printf("creating cgroup for %v\n", containerID)
 	cgroupManager := cgroups.NewCgroupManager(containerID)
-	defer cgroupManager.Destroy()
+	//defer cgroupManager.Destroy()
+	defer func() {
+		if normalExit {
+			return
+		}
+		log.Println("Removing cgroup...")
+		if err := cgroupManager.Destroy(); err != nil {
+			panic(err)
+		}
+	}()
+
 	if err := cgroupManager.Set(res); err != nil {
-		// FIXME: currently don't just exit when cgroup failed because cgroup is not stable yet
-		// alternative solution: kill init process if cgroup manager failed?
-		log.Printf("WARNING: cgroup manager `set` failed with: %v", err)
+		return fmt.Errorf("cgroup manager `set` failed with: %v", err)
 	}
+
+	defer func() {
+		if normalExit {
+			return
+		}
+		log.Println("Killing init process...")
+		if err := syscall.Kill(parent.Process.Pid, syscall.SIGTERM); err != nil {
+			panic(err)
+		}
+	}()
+
 	if err := cgroupManager.Apply(parent.Process.Pid); err != nil {
-		// FIXME
-		log.Printf("WARNING: cgroup manager `apply` failed with: %v", err)
+		return fmt.Errorf("cgroup manager `apply` failed with: %v", err)
 	}
 
 	if nw != "" {
@@ -141,7 +150,12 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName,
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() {
+		log.Println("closing ContainerInfo files...")
+		if err := file.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	if _, err := file.WriteString(jsonStr); err != nil {
 		return "", err
 	}
