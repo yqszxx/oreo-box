@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 )
 
 //Create a AUFS filesystem as container root workspace
@@ -75,8 +76,7 @@ func MountVolume(volumeURLs []string, containerName string) error {
 		return fmt.Errorf("fail to make container volume dir %s : %v", containerVolumeURL, err)
 	}
 	dirs := "dirs=" + parentUrl
-	_, err := exec.Command("mount", "-t", "aufs", "-o", dirs, "none", containerVolumeURL).CombinedOutput()
-	if err != nil {
+	if err := syscall.Mount("none", mntURL, "aufs", 0, dirs); err != nil {
 		return fmt.Errorf("fail to mount container volume : %v", err)
 	}
 	return nil
@@ -91,8 +91,7 @@ func CreateMountPoint(containerName, imageName string) error {
 	tmpImageLocation := RootUrl + "/" + imageName
 	mntURL := fmt.Sprintf(MntUrl, containerName)
 	dirs := "dirs=" + tmpWriteLayer + ":" + tmpImageLocation
-	_, err := exec.Command("mount", "-t", "aufs", "-o", dirs, "none", mntURL).CombinedOutput()
-	if err != nil {
+	if err := syscall.Mount("none", mntURL, "aufs", 0, dirs); err != nil {
 		return fmt.Errorf("fail to creat aufs mount point : %v", err)
 	}
 	return nil
@@ -120,8 +119,7 @@ func DeleteWorkSpace(volume, containerName string) error {
 
 func DeleteMountPoint(containerName string) error {
 	mntURL := fmt.Sprintf(MntUrl, containerName)
-	_, err := exec.Command("umount", mntURL).CombinedOutput()
-	if err != nil {
+	if err := syscall.Unmount(mntURL, syscall.MNT_DETACH); err != nil {
 		return fmt.Errorf("fail to unmount dir %s : %v", mntURL, err)
 	}
 	if err := os.RemoveAll(mntURL); err != nil {
@@ -133,8 +131,8 @@ func DeleteMountPoint(containerName string) error {
 func DeleteVolume(volumeURLs []string, containerName string) error {
 	mntURL := fmt.Sprintf(MntUrl, containerName)
 	containerUrl := mntURL + "/" + volumeURLs[1]
-	if _, err := exec.Command("umount", containerUrl).CombinedOutput(); err != nil {
-		return fmt.Errorf("fail to unmount conntainer volume %s : %v", containerUrl, err)
+	if err := syscall.Unmount(containerUrl, syscall.MNT_DETACH); err != nil {
+		return fmt.Errorf("fail to unmount container volume %s : %v", containerUrl, err)
 	}
 	return nil
 }
