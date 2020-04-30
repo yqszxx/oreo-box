@@ -2,7 +2,6 @@ package container
 
 import (
 	"fmt"
-	log "github.com/Sirupsen/logrus"
 	"os"
 	"os/exec"
 	"syscall"
@@ -31,16 +30,15 @@ type ContainerInfo struct {
 	PortMapping []string `json:"portmapping"` //端口映射
 }
 
-func NewParentProcess(tty bool, containerName, volume, imageName string, envSlice []string) (*exec.Cmd, *os.File) {
-	readPipe, writePipe, err := NewPipe()
+func NewParentProcess(tty bool, containerName, volume, imageName string, envSlice []string) (*exec.Cmd, *os.File, error) {
+	// create pipe for sending command into container
+	readPipe, writePipe, err := os.Pipe()
 	if err != nil {
-		log.Errorf("New pipe error %v", err)
-		return nil, nil
+		return nil, nil, fmt.Errorf("cannot create new pipe: %v", err)
 	}
 	initCmd, err := os.Readlink("/proc/self/exe")
 	if err != nil {
-		log.Errorf("get init process error %v", err)
-		return nil, nil
+		return nil, nil, fmt.Errorf("cannot get the location of 'self': %v", err)
 	}
 
 	cmd := exec.Command(initCmd, "init")
@@ -56,29 +54,21 @@ func NewParentProcess(tty bool, containerName, volume, imageName string, envSlic
 	} else {
 		dirURL := fmt.Sprintf(DefaultInfoLocation, containerName)
 		if err := os.MkdirAll(dirURL, 0622); err != nil {
-			log.Errorf("NewParentProcess mkdir %s error %v", dirURL, err)
-			return nil, nil
+			return nil, nil, fmt.Errorf("cannot create new dir '%s': %v", dirURL, err)
 		}
 		stdLogFilePath := dirURL + ContainerLogFile
 		stdLogFile, err := os.Create(stdLogFilePath)
 		if err != nil {
-			log.Errorf("NewParentProcess create file %s error %v", stdLogFilePath, err)
-			return nil, nil
+			return nil, nil, fmt.Errorf("cannot create new file '%s': %v", stdLogFilePath, err)
 		}
 		cmd.Stdout = stdLogFile
 	}
 
 	cmd.ExtraFiles = []*os.File{readPipe}
 	cmd.Env = append(os.Environ(), envSlice...)
-	NewWorkSpace(volume, imageName, containerName)
-	cmd.Dir = fmt.Sprintf(MntUrl, containerName)
-	return cmd, writePipe
-}
-
-func NewPipe() (*os.File, *os.File, error) {
-	read, write, err := os.Pipe()
-	if err != nil {
-		return nil, nil, err
+	if err := NewWorkSpace(volume, imageName, containerName); err != nil {
+		return nil, nil, fmt.Errorf("cannot create new workspace: %v", err)
 	}
-	return read, write, nil
+	cmd.Dir = fmt.Sprintf(MntUrl, containerName)
+	return cmd, writePipe, nil
 }

@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
 	"github.com/yqszxx/oreo-box/container"
 	_ "github.com/yqszxx/oreo-box/nsenter"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,30 +15,38 @@ import (
 const ENV_EXEC_PID = "mydocker_pid"
 const ENV_EXEC_CMD = "mydocker_cmd"
 
-func ExecContainer(containerName string, comArray []string) {
+func ExecContainer(containerName string, comArray []string) error {
 	pid, err := GetContainerPidByName(containerName)
 	if err != nil {
-		log.Errorf("Exec container getContainerPidByName %s error %v", containerName, err)
-		return
+		return fmt.Errorf("getContainerPidByName(%s) failed with error: %v", containerName, err)
 	}
 
 	cmdStr := strings.Join(comArray, " ")
-	log.Infof("container pid %s", pid)
-	log.Infof("command %s", cmdStr)
+	log.Printf("exec in container pid %s with command '%s'\n", pid, cmdStr)
 
 	cmd := exec.Command("/proc/self/exe", "exec")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	os.Setenv(ENV_EXEC_PID, pid)
-	os.Setenv(ENV_EXEC_CMD, cmdStr)
-	containerEnvs := getEnvsByPid(pid)
+	if err := os.Setenv(ENV_EXEC_PID, pid); err != nil {
+		return err
+	}
+	if err := os.Setenv(ENV_EXEC_CMD, cmdStr); err != nil {
+		return err
+	}
+
+	containerEnvs, err := getEnvsByPid(pid)
+	if err != nil {
+		return err
+	}
 	cmd.Env = append(os.Environ(), containerEnvs...)
 
 	if err := cmd.Run(); err != nil {
-		log.Errorf("Exec container %s error %v", containerName, err)
+		return fmt.Errorf("cannot exec in container %s: %v", containerName, err)
 	}
+
+	return nil
 }
 
 func GetContainerPidByName(containerName string) (string, error) {
@@ -55,14 +63,13 @@ func GetContainerPidByName(containerName string) (string, error) {
 	return containerInfo.Pid, nil
 }
 
-func getEnvsByPid(pid string) []string {
+func getEnvsByPid(pid string) ([]string, error) {
 	path := fmt.Sprintf("/proc/%s/environ", pid)
 	contentBytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		log.Errorf("Read file %s error %v", path, err)
-		return nil
+		return nil, fmt.Errorf("cannot read file %s : %v", path, err)
 	}
 	//env split by \u0000
 	envs := strings.Split(string(contentBytes), "\u0000")
-	return envs
+	return envs, nil
 }

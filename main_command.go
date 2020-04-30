@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	log "github.com/Sirupsen/logrus"
 	"github.com/urfave/cli"
 	"github.com/yqszxx/oreo-box/cgroups/subsystems"
 	"github.com/yqszxx/oreo-box/container"
 	"github.com/yqszxx/oreo-box/network"
+	"log"
 	"os"
 )
 
@@ -61,7 +61,7 @@ var runCommand = cli.Command{
 	},
 	Action: func(context *cli.Context) error {
 		if len(context.Args()) < 1 {
-			return fmt.Errorf("Missing container command")
+			return fmt.Errorf("no enough arguments provided")
 		}
 		var cmdArray []string
 		for _, arg := range context.Args() {
@@ -69,14 +69,16 @@ var runCommand = cli.Command{
 		}
 
 		//get image name
+		//noinspection GoNilness
 		imageName := cmdArray[0]
+		//noinspection GoNilness
 		cmdArray = cmdArray[1:]
 
 		createTty := context.Bool("ti")
 		detach := context.Bool("d")
 
 		if createTty && detach {
-			return fmt.Errorf("ti and d paramter can not both provided")
+			return fmt.Errorf("ti and d paramter both provided")
 		}
 		resConf := &subsystems.ResourceConfig{
 			MemoryLimit: context.String("m"),
@@ -84,7 +86,7 @@ var runCommand = cli.Command{
 			CpuShare:    context.String("cpushare"),
 			CpuQuotaUs:  context.String("cpuquota"),
 		}
-		log.Infof("createTty %v", createTty)
+
 		containerName := context.String("name")
 		volume := context.String("v")
 		network := context.String("net")
@@ -92,8 +94,7 @@ var runCommand = cli.Command{
 		envSlice := context.StringSlice("e")
 		portmapping := context.StringSlice("p")
 
-		Run(createTty, cmdArray, resConf, containerName, volume, imageName, envSlice, network, portmapping)
-		return nil
+		return Run(createTty, cmdArray, resConf, containerName, volume, imageName, envSlice, network, portmapping)
 	},
 }
 
@@ -101,9 +102,8 @@ var initCommand = cli.Command{
 	Name:  "init",
 	Usage: "Init container process run user's process in container. Do not call it outside",
 	Action: func(context *cli.Context) error {
-		log.Infof("init come on")
-		err := container.RunContainerInitProcess()
-		return err
+		log.Println("Starting init process...")
+		return container.RunContainerInitProcess()
 	},
 }
 
@@ -134,8 +134,8 @@ var execCommand = cli.Command{
 	Usage: "exec a command into container",
 	Action: func(context *cli.Context) error {
 		//This is for callback
-		if os.Getenv(ENV_EXEC_PID) != "" {
-			log.Infof("pid callback pid %s", os.Getgid())
+		if os.Getenv(ENV_EXEC_PID) != "" && os.Getenv(ENV_EXEC_CMD) != "" {
+			log.Println("Cgo code executed")
 			return nil
 		}
 
@@ -147,7 +147,9 @@ var execCommand = cli.Command{
 		for _, arg := range context.Args().Tail() {
 			commandArray = append(commandArray, arg)
 		}
-		ExecContainer(containerName, commandArray)
+		if err := ExecContainer(containerName, commandArray); err != nil {
+			return fmt.Errorf("exec failed because: %v", err)
+		}
 		return nil
 	},
 }

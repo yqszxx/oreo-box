@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
 	"github.com/yqszxx/oreo-box/cgroups"
 	"github.com/yqszxx/oreo-box/cgroups/subsystems"
 	"github.com/yqszxx/oreo-box/container"
 	"github.com/yqszxx/oreo-box/network"
+	"log"
 	"math/rand"
 	"os"
 	"strconv"
@@ -16,41 +16,46 @@ import (
 )
 
 func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerName, volume, imageName string,
-	envSlice []string, nw string, portmapping []string) {
+	envSlice []string, nw string, portmapping []string) error {
 	containerID := randStringBytes(10)
 	if containerName == "" {
 		containerName = containerID
 	}
 
-	parent, writePipe := container.NewParentProcess(tty, containerName, volume, imageName, envSlice)
-	if parent == nil {
-		log.Errorf("New parent process error")
-		return
+	parent, writePipe, err := container.NewParentProcess(tty, containerName, volume, imageName, envSlice)
+	if err != nil {
+		return fmt.Errorf("cannot create parent process: %v", err)
 	}
 
 	if err := parent.Start(); err != nil {
-		log.Error(err)
+		return err
 	}
 
-	fmt.Printf("hahaha:%d\n", parent.Process.Pid)
-
 	//record container info
-	containerName, err := recordContainerInfo(parent.Process.Pid, comArray, containerName, containerID, volume)
+	containerName, err = recordContainerInfo(parent.Process.Pid, comArray, containerName, containerID, volume)
 	if err != nil {
-		log.Errorf("Record container info error %v", err)
-		return
+		return fmt.Errorf("cannot record container info %v", err)
 	}
 
 	// use containerID as cgroup name
-	fmt.Println(containerID)
+	log.Printf("creating cgroup for %v\n", containerID)
 	cgroupManager := cgroups.NewCgroupManager(containerID)
 	defer cgroupManager.Destroy()
-	cgroupManager.Set(res)
-	cgroupManager.Apply(parent.Process.Pid)
+	if err := cgroupManager.Set(res); err != nil {
+		// FIXME: currently don't just exit when cgroup failed because cgroup is not stable yet
+		// alternative solution: kill init process if cgroup manager failed?
+		log.Printf("WARNING: cgroup manager `set` failed with: %v", err)
+	}
+	if err := cgroupManager.Apply(parent.Process.Pid); err != nil {
+		// FIXME
+		log.Printf("WARNING: cgroup manager `apply` failed with: %v", err)
+	}
 
 	if nw != "" {
 		// config container network
-		network.Init()
+		if err := network.Init(); err != nil {
+			return err
+		}
 		containerInfo := &container.ContainerInfo{
 			Id:          containerID,
 			Pid:         strconv.Itoa(parent.Process.Pid),
@@ -58,26 +63,41 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 			PortMapping: portmapping,
 		}
 		if err := network.Connect(nw, containerInfo); err != nil {
-			log.Errorf("Error Connect Network %v", err)
-			return
+			return fmt.Errorf("cannot connect network %v", err)
 		}
 	}
 
-	sendInitCommand(comArray, writePipe)
-
-	if tty {
-		parent.Wait()
-		deleteContainerInfo(containerName)
-		container.DeleteWorkSpace(volume, containerName)
+	if err := sendInitCommand(comArray, writePipe); err != nil {
+		return err
 	}
 
+	if tty {
+		if err := parent.Wait(); err != nil {
+			return fmt.Errorf("error waiting init process: %v", err)
+		}
+		if err := deleteContainerInfo(containerName); err != nil {
+			return fmt.Errorf("cannot delete container info dir: %v", err)
+		}
+
+		if err := container.DeleteWorkSpace(volume, containerName); err != nil {
+			return fmt.Errorf("cannot delete workspace: %v", err)
+		}
+		log.Println("Interactive mode terminated successfully")
+	}
+
+	return nil
 }
 
-func sendInitCommand(comArray []string, writePipe *os.File) {
+func sendInitCommand(comArray []string, writePipe *os.File) error {
 	command := strings.Join(comArray, " ")
-	log.Infof("command all is %s", command)
-	writePipe.WriteString(command)
-	writePipe.Close()
+	log.Printf("command all is %s", command)
+	if _, err := writePipe.WriteString(command); err != nil {
+		return err
+	}
+	if err := writePipe.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func recordContainerInfo(containerPID int, commandArray []string, containerName, id, volume string) (string, error) {
@@ -95,36 +115,34 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName,
 
 	jsonBytes, err := json.Marshal(containerInfo)
 	if err != nil {
-		log.Errorf("Record container info error %v", err)
 		return "", err
 	}
 	jsonStr := string(jsonBytes)
 
 	dirUrl := fmt.Sprintf(container.DefaultInfoLocation, containerName)
 	if err := os.MkdirAll(dirUrl, 0622); err != nil {
-		log.Errorf("Mkdir error %s error %v", dirUrl, err)
 		return "", err
 	}
 	fileName := dirUrl + "/" + container.ConfigName
 	file, err := os.Create(fileName)
-	defer file.Close()
 	if err != nil {
-		log.Errorf("Create file %s error %v", fileName, err)
 		return "", err
 	}
+	defer file.Close()
 	if _, err := file.WriteString(jsonStr); err != nil {
-		log.Errorf("File write string error %v", err)
 		return "", err
 	}
 
 	return containerName, nil
 }
 
-func deleteContainerInfo(containerId string) {
+func deleteContainerInfo(containerId string) error {
 	dirURL := fmt.Sprintf(container.DefaultInfoLocation, containerId)
 	if err := os.RemoveAll(dirURL); err != nil {
-		log.Errorf("Remove dir %s error %v", dirURL, err)
+		return fmt.Errorf("cannot remove dir %s : %v", dirURL, err)
 	}
+
+	return nil
 }
 
 func randStringBytes(n int) string {
