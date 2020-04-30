@@ -76,7 +76,6 @@ func MountVolume(volumeURLs []string, containerName string) error {
 		return fmt.Errorf("fail to make container volume dir %s : %v", containerVolumeURL, err)
 	}
 	dirs := "dirs=" + parentUrl
-	//_, err := exec.Command("mount", "-t", "aufs", "-o", dirs, "none", containerVolumeURL).CombinedOutput()
 	if err := syscall.Mount("none", mntURL, "aufs", 0, dirs); err != nil {
 		return fmt.Errorf("fail to mount container volume : %v", err)
 	}
@@ -92,7 +91,6 @@ func CreateMountPoint(containerName, imageName string) error {
 	tmpImageLocation := RootUrl + "/" + imageName
 	mntURL := fmt.Sprintf(MntUrl, containerName)
 	dirs := "dirs=" + tmpWriteLayer + ":" + tmpImageLocation
-	//_, err := exec.Command("mount", "-t", "aufs", "-o", dirs, "none", mntURL).CombinedOutput()
 	if err := syscall.Mount("none", mntURL, "aufs", 0, dirs); err != nil {
 		return fmt.Errorf("fail to creat aufs mount point : %v", err)
 	}
@@ -121,11 +119,6 @@ func DeleteWorkSpace(volume, containerName string) error {
 
 func DeleteMountPoint(containerName string) error {
 	mntURL := fmt.Sprintf(MntUrl, containerName)
-	/*
-		if _, err := exec.Command("umount", mntUrl).CombinedOutput(); err != nil {
-			return fmt.Errorf("fail to unmount dir %s : %v", mntUrl, err)
-		}
-	*/
 	if err := syscall.Unmount(mntURL, syscall.MNT_DETACH); err != nil {
 		return fmt.Errorf("fail to unmount dir %s : %v", mntURL, err)
 	}
@@ -138,11 +131,6 @@ func DeleteMountPoint(containerName string) error {
 func DeleteVolume(volumeURLs []string, containerName string) error {
 	mntURL := fmt.Sprintf(MntUrl, containerName)
 	containerUrl := mntURL + "/" + volumeURLs[1]
-	/*
-		if _, err := exec.Command("umount", containerUrl).CombinedOutput(); err != nil {
-			return fmt.Errorf("fail to unmount container volume %s : %v", containerUrl, err)
-		}
-	*/
 	if err := syscall.Unmount(containerUrl, syscall.MNT_DETACH); err != nil {
 		return fmt.Errorf("fail to unmount container volume %s : %v", containerUrl, err)
 	}
