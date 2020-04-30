@@ -31,8 +31,12 @@ var runCommand = cli.Command{
 			Usage: "cpushare limit",
 		},
 		cli.StringFlag{
-			Name:  "cpuset",
-			Usage: "cpuset limit",
+			Name:  "cpusetcpus",
+			Usage: "cpusetcpus limit",
+		},
+		cli.StringFlag{
+			Name:  "cpusetmems",
+			Usage: "cpusetmems limit",
 		},
 		cli.StringFlag{
 			Name:  "cpuquota",
@@ -82,7 +86,8 @@ var runCommand = cli.Command{
 		}
 		resConf := &subsystems.ResourceConfig{
 			MemoryLimit: context.String("m"),
-			CpuSet:      context.String("cpuset"),
+			CpuSetMems:  context.String("cpusetmems"),
+			CpuSetCpus:  context.String("cpusetcpus"),
 			CpuShare:    context.String("cpushare"),
 			CpuQuotaUs:  context.String("cpuquota"),
 		}
