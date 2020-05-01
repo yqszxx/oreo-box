@@ -64,7 +64,12 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 		}
 		log.Println("Killing init process...")
 		if err := syscall.Kill(parent.Process.Pid, syscall.SIGTERM); err != nil {
-			panic(err)
+			// for init processes that don't return 0 as return value
+			if err.Error() == "no such process" {
+				log.Println("Init process is already dead!")
+			} else {
+				panic(err)
+			}
 		}
 	}()
 
