@@ -2,7 +2,7 @@ package network
 
 import (
 	"encoding/json"
-	log "github.com/Sirupsen/logrus"
+	"fmt"
 	"net"
 	"os"
 	"path"
@@ -25,24 +25,27 @@ func (ipam *IPAM) load() error {
 		if os.IsNotExist(err) {
 			return nil
 		} else {
-			return err
+			return fmt.Errorf("cannot stat the file: %v", err)
 		}
 	}
 	subnetConfigFile, err := os.Open(ipam.SubnetAllocatorPath)
-	defer subnetConfigFile.Close()
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot open %s: %v", ipam.SubnetAllocatorPath, err)
 	}
+	defer func() {
+		if err := subnetConfigFile.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	subnetJson := make([]byte, 2000)
 	n, err := subnetConfigFile.Read(subnetJson)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot read: %v", err)
 	}
 
 	err = json.Unmarshal(subnetJson[:n], ipam.Subnets)
 	if err != nil {
-		log.Errorf("Error dump allocation info, %v", err)
-		return err
+		return fmt.Errorf("cannot unmarshal: %v", err)
 	}
 	return nil
 }
@@ -51,25 +54,31 @@ func (ipam *IPAM) dump() error {
 	ipamConfigFileDir, _ := path.Split(ipam.SubnetAllocatorPath)
 	if _, err := os.Stat(ipamConfigFileDir); err != nil {
 		if os.IsNotExist(err) {
-			os.MkdirAll(ipamConfigFileDir, 0644)
+			if err := os.MkdirAll(ipamConfigFileDir, 0644); err != nil {
+				return fmt.Errorf("cannot make directory: %v", err)
+			}
 		} else {
-			return err
+			return fmt.Errorf("cannot stat the file: %v", err)
 		}
 	}
 	subnetConfigFile, err := os.OpenFile(ipam.SubnetAllocatorPath, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
-	defer subnetConfigFile.Close()
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot open %s: %v", ipam.SubnetAllocatorPath, err)
 	}
+	defer func() {
+		if err := subnetConfigFile.Close(); err != nil {
+			panic(err)
+		}
+	}()
 
 	ipamConfigJson, err := json.Marshal(ipam.Subnets)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot marshal: %v", err)
 	}
 
 	_, err = subnetConfigFile.Write(ipamConfigJson)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot write: %v", err)
 	}
 
 	return nil
@@ -82,7 +91,7 @@ func (ipam *IPAM) Allocate(subnet *net.IPNet) (ip net.IP, err error) {
 	// 从文件中加载已经分配的网段信息
 	err = ipam.load()
 	if err != nil {
-		log.Errorf("Error dump allocation info, %v", err)
+		return nil, fmt.Errorf("cannot dump allocation info: %v", err)
 	}
 
 	_, subnet, _ = net.ParseCIDR(subnet.String())
@@ -107,7 +116,9 @@ func (ipam *IPAM) Allocate(subnet *net.IPNet) (ip net.IP, err error) {
 		}
 	}
 
-	ipam.dump()
+	if err := ipam.dump(); err != nil {
+		return nil, fmt.Errorf("cannot dump: %v", err)
+	}
 	return
 }
 
@@ -118,7 +129,7 @@ func (ipam *IPAM) Release(subnet *net.IPNet, ipaddr *net.IP) error {
 
 	err := ipam.load()
 	if err != nil {
-		log.Errorf("Error dump allocation info, %v", err)
+		return fmt.Errorf("cannot dump allocation info: %v", err)
 	}
 
 	c := 0
@@ -132,6 +143,8 @@ func (ipam *IPAM) Release(subnet *net.IPNet, ipaddr *net.IP) error {
 	ipalloc[c] = '0'
 	(*ipam.Subnets)[subnet.String()] = string(ipalloc)
 
-	ipam.dump()
+	if err := ipam.dump(); err != nil {
+		return fmt.Errorf("cannot dump: %v", err)
+	}
 	return nil
 }
