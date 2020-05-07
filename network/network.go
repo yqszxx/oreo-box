@@ -1,13 +1,12 @@
 package network
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
-	"net"
-	//"os"
-	"encoding/json"
 	"github.com/yqszxx/oreo-box/container"
+	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -19,7 +18,7 @@ import (
 
 var (
 	defaultNetworkPath = "/var/run/mydocker/network/network/"
-	drivers            = map[string]NetworkDriver{}
+	drivers            = map[string]Driver{}
 	networks           = map[string]*Network{}
 )
 
@@ -38,7 +37,7 @@ type Network struct {
 	Driver  string
 }
 
-type NetworkDriver interface {
+type Driver interface {
 	Name() string
 	Create(subnet string, name string) (*Network, error)
 	Delete(network Network) error
