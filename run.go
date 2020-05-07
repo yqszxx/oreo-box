@@ -71,6 +71,10 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 				panic(err)
 			}
 		}
+		log.Println("Removing workspace...")
+		if err := container.DeleteWorkSpace(volume, containerName); err != nil {
+			panic(err)
+		}
 	}()
 
 	if err := cgroupManager.Apply(parent.Process.Pid); err != nil {
