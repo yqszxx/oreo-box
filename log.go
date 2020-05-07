@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	log "github.com/Sirupsen/logrus"
 	"github.com/yqszxx/oreo-box/container"
 	"io/ioutil"
+	"log"
 	"os"
 )
 

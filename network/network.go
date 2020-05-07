@@ -150,8 +150,6 @@ func Init() error {
 		return err
 	}
 
-	//logrus.Infof("networks: %v", networks)
-
 	return nil
 }
 
