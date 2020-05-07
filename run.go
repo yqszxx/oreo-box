@@ -89,7 +89,7 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig, containerN
 			PortMapping: portmapping,
 		}
 		if err := network.Connect(nw, containerInfo); err != nil {
-			return fmt.Errorf("cannot connect network %v", err)
+			return fmt.Errorf("cannot connect network: %v", err)
 		}
 	}
 

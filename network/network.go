@@ -7,7 +7,6 @@ import (
 	"net"
 	//"os"
 	"encoding/json"
-	"github.com/Sirupsen/logrus"
 	"github.com/yqszxx/oreo-box/container"
 	"os"
 	"os/exec"
@@ -50,30 +49,34 @@ type NetworkDriver interface {
 func (nw *Network) dump(dumpPath string) error {
 	if _, err := os.Stat(dumpPath); err != nil {
 		if os.IsNotExist(err) {
-			os.MkdirAll(dumpPath, 0644)
+			if err := os.MkdirAll(dumpPath, 0644); err != nil {
+				return fmt.Errorf("cannot make directory: %v", err)
+			}
 		} else {
-			return err
+			return fmt.Errorf("cannot stat the file: %v", err)
 		}
 	}
 
 	nwPath := path.Join(dumpPath, nw.Name)
 	nwFile, err := os.OpenFile(nwPath, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		logrus.Errorf("error：", err)
-		return err
+		return fmt.Errorf("cannot open file %v", err)
+
 	}
-	defer nwFile.Close()
+	defer func() {
+		if err := nwFile.Close(); err != nil {
+			panic(err)
+		}
+	}()
 
 	nwJson, err := json.Marshal(nw)
 	if err != nil {
-		logrus.Errorf("error：", err)
-		return err
+		return fmt.Errorf("cannot marshal %v", err)
 	}
 
 	_, err = nwFile.Write(nwJson)
 	if err != nil {
-		logrus.Errorf("error：", err)
-		return err
+		return fmt.Errorf("cannot write %v", err)
 	}
 	return nil
 }
@@ -92,10 +95,14 @@ func (nw *Network) remove(dumpPath string) error {
 
 func (nw *Network) load(dumpPath string) error {
 	nwConfigFile, err := os.Open(dumpPath)
-	defer nwConfigFile.Close()
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := nwConfigFile.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	nwJson := make([]byte, 2000)
 	n, err := nwConfigFile.Read(nwJson)
 	if err != nil {
@@ -104,8 +111,7 @@ func (nw *Network) load(dumpPath string) error {
 
 	err = json.Unmarshal(nwJson[:n], nw)
 	if err != nil {
-		logrus.Errorf("Error load nw info", err)
-		return err
+		return fmt.Errorf("cannot load nw info %v", err)
 	}
 	return nil
 }
@@ -116,13 +122,15 @@ func Init() error {
 
 	if _, err := os.Stat(defaultNetworkPath); err != nil {
 		if os.IsNotExist(err) {
-			os.MkdirAll(defaultNetworkPath, 0644)
+			if err := os.MkdirAll(defaultNetworkPath, 0644); err != nil {
+				return fmt.Errorf("cannot make directory: %v", err)
+			}
 		} else {
-			return err
+			return fmt.Errorf("cannot stat the file: %v", err)
 		}
 	}
 
-	filepath.Walk(defaultNetworkPath, func(nwPath string, info os.FileInfo, err error) error {
+	err := filepath.Walk(defaultNetworkPath, func(nwPath string, info os.FileInfo, err error) error {
 		if strings.HasSuffix(nwPath, "/") {
 			return nil
 		}
@@ -132,12 +140,15 @@ func Init() error {
 		}
 
 		if err := nw.load(nwPath); err != nil {
-			logrus.Errorf("error load network: %s", err)
+			return fmt.Errorf("cannot load network: %v", err)
 		}
 
 		networks[nwName] = nw
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 
 	//logrus.Infof("networks: %v", networks)
 
@@ -160,20 +171,20 @@ func CreateNetwork(driver, subnet, name string) error {
 	return nw.dump(defaultNetworkPath)
 }
 
-func ListNetwork() {
+func ListNetwork() error {
 	w := tabwriter.NewWriter(os.Stdout, 12, 1, 3, ' ', 0)
-	fmt.Fprint(w, "NAME\tIpRange\tDriver\n")
+	_, _ = fmt.Fprint(w, "NAME\tIpRange\tDriver\n")
 	for _, nw := range networks {
-		fmt.Fprintf(w, "%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n",
 			nw.Name,
 			nw.IpRange.String(),
 			nw.Driver,
 		)
 	}
 	if err := w.Flush(); err != nil {
-		logrus.Errorf("Flush error %v", err)
-		return
+		return fmt.Errorf("cannot flush %v", err)
 	}
+	return nil
 }
 
 func DeleteNetwork(networkName string) error {
@@ -193,10 +204,11 @@ func DeleteNetwork(networkName string) error {
 	return nw.remove(defaultNetworkPath)
 }
 
+//TODO
 func enterContainerNetns(enLink *netlink.Link, cinfo *container.ContainerInfo) func() {
 	f, err := os.OpenFile(fmt.Sprintf("/proc/%s/ns/net", cinfo.Pid), os.O_RDONLY, 0)
 	if err != nil {
-		logrus.Errorf("error get container net namespace, %v", err)
+		fmt.Errorf("error get container net namespace, %v", err)
 	}
 
 	nsFD := f.Fd()
@@ -204,18 +216,18 @@ func enterContainerNetns(enLink *netlink.Link, cinfo *container.ContainerInfo) f
 
 	// 修改veth peer 另外一端移到容器的namespace中
 	if err = netlink.LinkSetNsFd(*enLink, int(nsFD)); err != nil {
-		logrus.Errorf("error set link netns , %v", err)
+		fmt.Errorf("error set link netns , %v", err)
 	}
 
 	// 获取当前的网络namespace
 	origns, err := netns.Get()
 	if err != nil {
-		logrus.Errorf("error get current netns, %v", err)
+		fmt.Errorf("cannot get current netns: %v", err)
 	}
 
 	// 设置当前进程到新的网络namespace，并在函数执行完成之后再恢复到之前的namespace
 	if err = netns.Set(netns.NsHandle(nsFD)); err != nil {
-		logrus.Errorf("error set netns, %v", err)
+		fmt.Errorf("cannot set netns: %v", err)
 	}
 	return func() {
 		netns.Set(origns)
@@ -228,7 +240,7 @@ func enterContainerNetns(enLink *netlink.Link, cinfo *container.ContainerInfo) f
 func configEndpointIpAddressAndRoute(ep *Endpoint, cinfo *container.ContainerInfo) error {
 	peerLink, err := netlink.LinkByName(ep.Device.PeerName)
 	if err != nil {
-		return fmt.Errorf("fail config endpoint: %v", err)
+		return fmt.Errorf("cannot config endpoint: %v", err)
 	}
 
 	defer enterContainerNetns(&peerLink, cinfo)()
@@ -263,12 +275,11 @@ func configEndpointIpAddressAndRoute(ep *Endpoint, cinfo *container.ContainerInf
 	return nil
 }
 
-func configPortMapping(ep *Endpoint, cinfo *container.ContainerInfo) error {
+func configPortMapping(ep *Endpoint) error {
 	for _, pm := range ep.PortMapping {
 		portMapping := strings.Split(pm, ":")
 		if len(portMapping) != 2 {
-			logrus.Errorf("port mapping format error, %v", pm)
-			continue
+			return fmt.Errorf("port mapping format error, %v", pm)
 		}
 		iptablesCmd := fmt.Sprintf("-t nat -A PREROUTING -p tcp -m tcp --dport %s -j DNAT --to-destination %s:%s",
 			portMapping[0], ep.IPAddress.String(), portMapping[1])
@@ -276,8 +287,7 @@ func configPortMapping(ep *Endpoint, cinfo *container.ContainerInfo) error {
 		//err := cmd.Run()
 		output, err := cmd.Output()
 		if err != nil {
-			logrus.Errorf("iptables Output, %v", output)
-			continue
+			return fmt.Errorf("cannot create iptables, %v", output)
 		}
 	}
 	return nil
@@ -286,7 +296,7 @@ func configPortMapping(ep *Endpoint, cinfo *container.ContainerInfo) error {
 func Connect(networkName string, cinfo *container.ContainerInfo) error {
 	network, ok := networks[networkName]
 	if !ok {
-		return fmt.Errorf("No Such Network: %s", networkName)
+		return fmt.Errorf("cannot find network `%s`", networkName)
 	}
 
 	// 分配容器IP地址
@@ -311,9 +321,9 @@ func Connect(networkName string, cinfo *container.ContainerInfo) error {
 		return err
 	}
 
-	return configPortMapping(ep, cinfo)
-}
+	if err := configPortMapping(ep); err != nil {
+		return fmt.Errorf("cannot config port mapping: %v", err)
+	}
 
-func Disconnect(networkName string, cinfo *container.ContainerInfo) error {
 	return nil
 }
