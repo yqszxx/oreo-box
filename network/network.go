@@ -296,7 +296,7 @@ func configPortMapping(ep *Endpoint) error {
 func Connect(networkName string, cinfo *container.ContainerInfo) error {
 	network, ok := networks[networkName]
 	if !ok {
-		return fmt.Errorf("cannot find the Network")
+		return fmt.Errorf("cannot find network `%s`", networkName)
 	}
 
 	// 分配容器IP地址
