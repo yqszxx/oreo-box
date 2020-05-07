@@ -188,51 +188,55 @@ func ListNetwork() error {
 func DeleteNetwork(networkName string) error {
 	nw, ok := networks[networkName]
 	if !ok {
-		return fmt.Errorf("No Such Network: %s", networkName)
+		return fmt.Errorf("cannot find network `%s`", networkName)
 	}
 
 	if err := ipAllocator.Release(nw.IpRange, &nw.IpRange.IP); err != nil {
-		return fmt.Errorf("Error Remove Network gateway ip: %s", err)
+		return fmt.Errorf("cannot remove gateway ip: %s", err)
 	}
 
 	if err := drivers[nw.Driver].Delete(*nw); err != nil {
-		return fmt.Errorf("Error Remove Network DriverError: %s", err)
+		return fmt.Errorf("cannot delete network driver: %s", err)
 	}
 
 	return nw.remove(defaultNetworkPath)
 }
 
 //TODO
-func enterContainerNetns(enLink *netlink.Link, cinfo *container.ContainerInfo) func() {
+func enterContainerNetns(enLink *netlink.Link, cinfo *container.ContainerInfo) (func() error, error) {
 	f, err := os.OpenFile(fmt.Sprintf("/proc/%s/ns/net", cinfo.Pid), os.O_RDONLY, 0)
 	if err != nil {
-		fmt.Errorf("error get container net namespace, %v", err)
+		return nil, fmt.Errorf("cannot get container netns of pid `%s`: %v", cinfo.Pid, err)
 	}
 
 	nsFD := f.Fd()
 	runtime.LockOSThread()
 
-	// 修改veth peer 另外一端移到容器的namespace中
 	if err = netlink.LinkSetNsFd(*enLink, int(nsFD)); err != nil {
-		fmt.Errorf("error set link netns , %v", err)
+		return nil, fmt.Errorf("cannot set netns of link `%s`: %v", (*enLink).Attrs().Name, err)
 	}
 
-	// 获取当前的网络namespace
-	origns, err := netns.Get()
+	originalNS, err := netns.Get()
 	if err != nil {
-		fmt.Errorf("cannot get current netns: %v", err)
+		return nil, fmt.Errorf("cannot get current netns: %v", err)
 	}
 
-	// 设置当前进程到新的网络namespace，并在函数执行完成之后再恢复到之前的namespace
 	if err = netns.Set(netns.NsHandle(nsFD)); err != nil {
-		fmt.Errorf("cannot set netns: %v", err)
+		return nil, fmt.Errorf("cannot set netns: %v", err)
 	}
-	return func() {
-		netns.Set(origns)
-		origns.Close()
+	return func() error {
+		if err := netns.Set(originalNS); err != nil {
+			return fmt.Errorf("cannot set netns back: %v", err)
+		}
+		if err := originalNS.Close(); err != nil {
+			return fmt.Errorf("cannot close handle to original netns: %v", err)
+		}
 		runtime.UnlockOSThread()
-		f.Close()
-	}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("cannot close netns fd: %v", err)
+		}
+		return nil
+	}, nil
 }
 
 func configEndpointIpAddressAndRoute(ep *Endpoint, cinfo *container.ContainerInfo) error {
@@ -241,21 +245,29 @@ func configEndpointIpAddressAndRoute(ep *Endpoint, cinfo *container.ContainerInf
 		return fmt.Errorf("cannot config endpoint: %v", err)
 	}
 
-	defer enterContainerNetns(&peerLink, cinfo)()
+	leaveNS, err := enterContainerNetns(&peerLink, cinfo)
+	if err != nil {
+		return fmt.Errorf("cannot enter container netns: %v", err)
+	}
+	defer func() {
+		if err := leaveNS(); err != nil {
+			panic(err)
+		}
+	}()
 
 	interfaceIP := *ep.Network.IpRange
 	interfaceIP.IP = ep.IPAddress
 
 	if err = setInterfaceIP(ep.Device.PeerName, interfaceIP.String()); err != nil {
-		return fmt.Errorf("%v,%s", ep.Network, err)
+		return fmt.Errorf("cannot set ip of interface `%s`: %v", ep.Device.Name, err)
 	}
 
 	if err = setInterfaceUP(ep.Device.PeerName); err != nil {
-		return err
+		return fmt.Errorf("cannot bring up interface `%s`: %v", ep.Device.PeerName, err)
 	}
 
 	if err = setInterfaceUP("lo"); err != nil {
-		return err
+		return fmt.Errorf("cannot bring up interface `lo`: %v", err)
 	}
 
 	_, cidr, _ := net.ParseCIDR("0.0.0.0/0")
