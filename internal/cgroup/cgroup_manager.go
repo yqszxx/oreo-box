@@ -1,8 +1,8 @@
-package cgroups
+package cgroup
 
 import (
 	"fmt"
-	"github.com/yqszxx/oreo-box/cgroups/subsystems"
+	"github.com/yqszxx/oreo-box/internal/cgroup/subsystems"
 )
 
 type CgroupManager struct {

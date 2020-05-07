@@ -3,32 +3,22 @@ package main
 import (
 	"fmt"
 	"github.com/urfave/cli"
+	"github.com/yqszxx/oreo-box/cmd"
 	"io/ioutil"
 	"log"
 	"os"
 )
 
-const usage = `mydocker is a simple container runtime implementation.
-			   The purpose of this project is to learn how docker works and how to write a docker by ourselves
-			   Enjoy it, just for fun.`
+const usage = `A lightweight yet secure container runtime.`
 
 func main() {
 
 	app := cli.NewApp()
-	app.Name = "mydocker"
+	app.Name = "Oreo Box"
+	app.Version = "20.05-rc1"
 	app.Usage = usage
 
-	app.Commands = []cli.Command{
-		initCommand,
-		runCommand,
-		listCommand,
-		logCommand,
-		execCommand,
-		stopCommand,
-		removeCommand,
-		commitCommand,
-		networkCommand,
-	}
+	app.Commands = cmd.Commands
 
 	app.Before = func(context *cli.Context) error {
 		// Log as JSON instead of the default ASCII formatter.

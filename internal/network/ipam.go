@@ -54,7 +54,7 @@ func (ipam *IPAM) dump() error {
 	ipamConfigFileDir, _ := path.Split(ipam.SubnetAllocatorPath)
 	if _, err := os.Stat(ipamConfigFileDir); err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(ipamConfigFileDir, 0644); err != nil {
+			if err := os.MkdirAll(ipamConfigFileDir, 0755); err != nil {
 				return fmt.Errorf("cannot make directory: %v", err)
 			}
 		} else {

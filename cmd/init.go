@@ -1,7 +1,8 @@
-package container
+package cmd
 
 import (
 	"fmt"
+	"github.com/urfave/cli"
 	"io/ioutil"
 	"log"
 	"os"
@@ -11,13 +12,22 @@ import (
 	"syscall"
 )
 
-func RunContainerInitProcess() error {
+var initCommand = cli.Command{
+	Name:   "init",
+	Usage:  "Bootstrapper of the new box, DO NOT call directly",
+	Action: initHandler,
+	Hidden: true,
+}
+
+func initHandler(*cli.Context) error {
+	log.Println("Starting init process...")
+
 	cmdArray, err := readUserCommand()
 	if err != nil {
 		return fmt.Errorf("cannot read init command: %v", err)
 	}
 	if cmdArray == nil || len(cmdArray) == 0 {
-		return fmt.Errorf("run container get user command error, cmdArray is nil")
+		return fmt.Errorf("run box get user command error, cmdArray is nil")
 	}
 
 	if err := setUpMount(); err != nil {
@@ -49,9 +59,6 @@ func readUserCommand() ([]string, error) {
 	return strings.Split(msgStr, " "), nil
 }
 
-/**
-Init 挂载点
-*/
 func setUpMount() error {
 	pwd, err := os.Getwd()
 	if err != nil {
@@ -74,13 +81,14 @@ func setUpMount() error {
 }
 
 func pivotRoot(root string) error {
-	//creat direction rootfs/.pivotDir to store old root
+	// creat directory `/.pivotDir` to store old root
 	pivotDir := filepath.Join(root, ".old_root")
-	if err := os.Mkdir(pivotDir, 0777); err != nil {
+	if err := os.Mkdir(pivotDir, 0755); err != nil {
 		return fmt.Errorf("cannot make old root dir: %v", err)
 	}
 
-	//mount root to make sure the new rootfs is not in the same location as the old rootfs
+	// remount root to make sure the new root does not reside in the same mount point as the old root
+	// remount as private to prevent mounting events from propagating to the bound old root
 	if err := syscall.Mount("/", "/", "private", syscall.MS_PRIVATE|syscall.MS_REC, ""); err != nil {
 		return fmt.Errorf("cannot remount rootfs as private: %v", err)
 	}

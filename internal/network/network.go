@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
-	"github.com/yqszxx/oreo-box/container"
+	"github.com/yqszxx/oreo-box/config"
+	"github.com/yqszxx/oreo-box/internal"
 	"net"
 	"os"
 	"os/exec"
@@ -17,9 +18,8 @@ import (
 )
 
 var (
-	defaultNetworkPath = "/var/run/mydocker/network/network/"
-	drivers            = map[string]Driver{}
-	networks           = map[string]*Network{}
+	drivers  = map[string]Driver{}
+	networks = map[string]*Network{}
 )
 
 type Endpoint struct {
@@ -48,7 +48,7 @@ type Driver interface {
 func (nw *Network) dump(dumpPath string) error {
 	if _, err := os.Stat(dumpPath); err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(dumpPath, 0644); err != nil {
+			if err := os.MkdirAll(dumpPath, 0755); err != nil {
 				return fmt.Errorf("cannot make directory: %v", err)
 			}
 		} else {
@@ -119,9 +119,9 @@ func Init() error {
 	var bridgeDriver = BridgeNetworkDriver{}
 	drivers[bridgeDriver.Name()] = &bridgeDriver
 
-	if _, err := os.Stat(defaultNetworkPath); err != nil {
+	if _, err := os.Stat(config.NetworkPath); err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(defaultNetworkPath, 0644); err != nil {
+			if err := os.MkdirAll(config.NetworkPath, 0755); err != nil {
 				return fmt.Errorf("cannot make directory: %v", err)
 			}
 		} else {
@@ -129,7 +129,7 @@ func Init() error {
 		}
 	}
 
-	err := filepath.Walk(defaultNetworkPath, func(nwPath string, info os.FileInfo, err error) error {
+	err := filepath.Walk(config.NetworkPath, func(nwPath string, info os.FileInfo, err error) error {
 		if strings.HasSuffix(nwPath, "/") {
 			return nil
 		}
@@ -165,7 +165,7 @@ func CreateNetwork(driver, subnet, name string) error {
 		return err
 	}
 
-	return nw.dump(defaultNetworkPath)
+	return nw.dump(config.NetworkPath)
 }
 
 func ListNetwork() error {
@@ -198,14 +198,13 @@ func DeleteNetwork(networkName string) error {
 		return fmt.Errorf("cannot delete network driver: %s", err)
 	}
 
-	return nw.remove(defaultNetworkPath)
+	return nw.remove(config.NetworkPath)
 }
 
-//TODO
-func enterContainerNetns(enLink *netlink.Link, cinfo *container.ContainerInfo) (func() error, error) {
+func enterboxNetns(enLink *netlink.Link, cinfo *internal.BoxInfo) (func() error, error) {
 	f, err := os.OpenFile(fmt.Sprintf("/proc/%s/ns/net", cinfo.Pid), os.O_RDONLY, 0)
 	if err != nil {
-		return nil, fmt.Errorf("cannot get container netns of pid `%s`: %v", cinfo.Pid, err)
+		return nil, fmt.Errorf("cannot get box netns of pid `%s`: %v", cinfo.Pid, err)
 	}
 
 	nsFD := f.Fd()
@@ -238,15 +237,15 @@ func enterContainerNetns(enLink *netlink.Link, cinfo *container.ContainerInfo) (
 	}, nil
 }
 
-func configEndpointIpAddressAndRoute(ep *Endpoint, cinfo *container.ContainerInfo) error {
+func configEndpointIpAddressAndRoute(ep *Endpoint, cinfo *internal.BoxInfo) error {
 	peerLink, err := netlink.LinkByName(ep.Device.PeerName)
 	if err != nil {
 		return fmt.Errorf("cannot config endpoint: %v", err)
 	}
 
-	leaveNS, err := enterContainerNetns(&peerLink, cinfo)
+	leaveNS, err := enterboxNetns(&peerLink, cinfo)
 	if err != nil {
-		return fmt.Errorf("cannot enter container netns: %v", err)
+		return fmt.Errorf("cannot enter box netns: %v", err)
 	}
 	defer func() {
 		if err := leaveNS(); err != nil {
@@ -302,30 +301,28 @@ func configPortMapping(ep *Endpoint) error {
 	return nil
 }
 
-func Connect(networkName string, cinfo *container.ContainerInfo) error {
+func Connect(networkName string, cinfo *internal.BoxInfo) error {
 	network, ok := networks[networkName]
 	if !ok {
 		return fmt.Errorf("cannot find network `%s`", networkName)
 	}
 
-	// 分配容器IP地址
 	ip, err := ipAllocator.Allocate(network.IpRange)
 	if err != nil {
 		return err
 	}
 
-	// 创建网络端点
 	ep := &Endpoint{
 		ID:          fmt.Sprintf("%s-%s", cinfo.Id, networkName),
 		IPAddress:   ip,
 		Network:     network,
 		PortMapping: cinfo.PortMapping,
 	}
-	// 调用网络驱动挂载和配置网络端点
+
 	if err = drivers[network.Driver].Connect(network, ep); err != nil {
 		return err
 	}
-	// 到容器的namespace配置容器网络设备IP地址
+
 	if err = configEndpointIpAddressAndRoute(ep, cinfo); err != nil {
 		return err
 	}
