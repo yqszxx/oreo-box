@@ -3,6 +3,7 @@ package fileSystem
 import (
 	"fmt"
 	"github.com/yqszxx/oreo-box/config"
+	"github.com/yqszxx/oreo-box/internal"
 	"log"
 	"os"
 	"path"
@@ -67,12 +68,8 @@ func MountImage(boxName, imageName string) error {
 	}
 	writableLayerPath := path.Join(config.WritableLayerPath, boxName)
 	imagePath := path.Join(config.ImagePath, imageName)
-	if stat, err := os.Stat(imagePath); err != nil || !stat.IsDir() {
-		if err != nil {
-			return fmt.Errorf("cannot find image `%s` at `%s`: %v", imageName, imagePath, err)
-		} else {
-			return fmt.Errorf("found image `%s` at `%s`, but is not a directory", imageName, imagePath)
-		}
+	if !internal.Exist(imagePath, true) {
+		return fmt.Errorf("cannot find image `%s` at `%s`", imageName, imagePath)
 	}
 
 	dirs := "dirs=" + writableLayerPath + ":" + imagePath

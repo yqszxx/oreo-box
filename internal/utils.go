@@ -11,6 +11,17 @@ import (
 	"syscall"
 )
 
+func Exist(path string, dir bool) bool {
+	stat, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	if dir && !stat.IsDir() {
+		return false
+	}
+	return true
+}
+
 func IsAlive(pid int) bool {
 	process, _ := os.FindProcess(pid)
 	if err := process.Signal(syscall.Signal(0)); err != nil {
